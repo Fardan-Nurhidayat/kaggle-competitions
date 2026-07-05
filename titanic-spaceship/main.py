@@ -2,7 +2,9 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder
-
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 df = pd.read_csv('titanic-spaceship/train.csv')
 label_encoder = LabelEncoder()
 df_copy = df.copy()
@@ -88,13 +90,64 @@ df_copy.drop(columns=["Cabin"] , inplace=True)
 # Mengubah tipe data CabinNum menjadi number
 df_copy["CabinNum"] = df_copy["CabinNum"].astype("int32")
 
-# Lakukan Label Encoding kepada kolom Deck , Side , HomePlanet
-df_copy = pd.get_dummies(df_copy , columns=["Deck" , "Side"])
-df_copy = pd.get_dummies(df_copy , columns=["HomePlanet"])
-df_copy = pd.get_dummies(df_copy , columns=["Destination"])
-# Lakukan one hot encoding kepada kolom VIP dan CryoSleep
-df_copy["VIP"] = label_encoder.fit_transform(df_copy["VIP"])
-df_copy["CryoSleep"] = label_encoder.fit_transform(df_copy["CryoSleep"])
-
 # Drop Name columns
 df_copy.drop(columns=["Name" ] , inplace=True)
+
+# Feature Engineering
+# Create a TotalSpend column
+expenses_columns = [
+    "RoomService",
+    "FoodCourt",
+    "ShoppingMall",
+    "Spa",
+    "VRDeck",
+]
+df_copy["TotalSpend"] = df_copy[expenses_columns].sum(axis=1)
+
+X = df_copy.drop(columns=["Transported"])
+y = df_copy["Transported"]
+
+# Split Data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# X_train = one_hot_encoder.fit_transform(X_train["HomePlanet" , "Destination" , "Deck" , "Side"])
+
+categorical_columns = [
+    "HomePlanet",
+    "Destination",
+    "Deck",
+    "Side",
+]
+
+encoder = OneHotEncoder(
+    sparse_output=False,
+    handle_unknown="ignore"
+)
+
+encoded = encoder.fit_transform(X_train[categorical_columns])
+encoded_df = pd.DataFrame(
+    encoded,
+    columns=encoder.get_feature_names_out(categorical_columns),
+    index=X_train.index
+)
+
+X_train = X_train.drop(columns=categorical_columns)
+X_train = pd.concat([X_train, encoded_df], axis=1)
+X_train["VIP"] = X_train["VIP"].astype("int32")
+X_train["CryoSleep"] = X_train["CryoSleep"].astype("int32")
+
+encoded_test = encoder.transform(X_test[categorical_columns])
+encoded_test_df = pd.DataFrame(
+    encoded_test,
+    columns=encoder.get_feature_names_out(categorical_columns),
+    index=X_test.index
+)
+
+X_test = X_test.drop(columns=categorical_columns)
+X_test = pd.concat([X_test, encoded_test_df], axis=1)
+X_test["VIP"] = X_test["VIP"].astype("int32")
+X_test["CryoSleep"] = X_test["CryoSleep"].astype("int32")
+
+random_forest = RandomForestClassifier(n_estimators=100)
+random_forest.fit(X_train, y_train)
+print(random_forest.score(X_test, y_test))
